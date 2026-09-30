@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rating System - 開発版08 スマホタブ安定版</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f5f7;color:#222}
+.container{max-width:900px;margin:auto;padding:12px}
+.tabs{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;scrollbar-width:thin}
+.tab{border:0;background:#ddd;padding:9px 15px;border-radius:8px;cursor:pointer;white-space:nowrap;font-weight:600;transition:.15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.tab:hover{background:#ccc}
+.tab.active{background:#222;color:#fff}
+.panel{display:none;background:#fff;padding:14px;border-radius:10px;box-shadow:0 1px 4px #0001}
+.panel.active{display:block}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+label{font-weight:600}
+select,input,button{font:inherit}
+input,select{padding:8px;border:1px solid #ccc;border-radius:6px;background:#fff}
+input:focus,select:focus{outline:2px solid #bbb;outline-offset:1px;border-color:#999}
+button.action{background:#222;color:#fff;border:0;border-radius:6px;padding:8px 13px;cursor:pointer;font-weight:600}
+button.action:hover{opacity:.88}
+button.danger{background:#b42318}
+.card{border:1px solid #ddd;border-radius:8px;padding:10px;margin-bottom:8px;background:#fff}
+.rating{font-size:24px;font-weight:bold}
+.small{font-size:12px;color:#666}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px;border-bottom:1px solid #eee;text-align:center}
+th{background:#f3f3f3}
+.win,.positive{color:#16803c;font-weight:bold}
+.loss,.negative{color:#c62828;font-weight:bold}
+.result-box{background:#f7f7f7;border-radius:8px;padding:12px;margin-top:10px}
+.delta{font-size:18px;font-weight:bold}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-box{border:1px solid #ddd;border-radius:8px;padding:10px}
+.stat-title{font-weight:bold;margin-bottom:5px}
+.rating-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.score-row{display:grid;grid-template-columns:minmax(120px,1fr) 90px;gap:8px;align-items:center;margin-bottom:6px}
+.autocomplete-wrap{position:relative;min-width:0}
+.player-search{width:100%}
+.autocomplete-list{position:absolute;left:0;right:0;top:100%;z-index:1000;background:#fff;border:1px solid #ccc;border-top:0;border-radius:0 0 6px 6px;box-shadow:0 3px 8px #0002;max-height:180px;overflow-y:auto}
+.autocomplete-item{padding:9px 10px;cursor:pointer}
+.autocomplete-item:hover,.autocomplete-item.active{background:#f1f1f1}
+.autocomplete-empty{padding:9px 10px;color:#777;font-size:12px}
+#scoreInputs{margin-bottom:6px}
+#matchResult:empty{display:none}
+@media(max-width:600px){
+.container{padding:8px}.tabs{gap:4px}.tab{padding:8px 12px}.panel{padding:10px}
+.stat-grid{grid-template-columns:1fr}.rating-summary{grid-template-columns:1fr 1fr}
+.score-row{grid-template-columns:minmax(0,1fr) 82px}table{font-size:12px}th,td{padding:6px 4px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="tabs">
+<button type="button" class="tab active" data-tab="match" onclick="activateTab(this);return false;">対戦</button>
+<button type="button" class="tab" data-tab="players" onclick="activateTab(this);return false;">選手</button>
+<button type="button" class="tab" data-tab="ranking" onclick="activateTab(this);return false;">ランキング</button>
+<button type="button" class="tab" data-tab="stats" onclick="activateTab(this);return false;">個人成績</button>
+<button type="button" class="tab" data-tab="history" onclick="activateTab(this);return false;">履歴</button>
+</div>
+
+<section id="match" class="panel active">
+<div class="row">
+<label>形式</label>
+<select id="format"><option value="3">3先</option><option value="5">5先</option><option value="10">10先</option></select>
+<label>人数</label>
+<select id="playerCount"><option value="2">2人戦</option><option value="3">3人戦</option><option value="4">4人戦</option></select>
+</div>
+<div id="scoreInputs"></div>
+<div class="small">※1位は指定した「先」の本数が必要です。同点は現在登録できません。</div>
+<button class="action" onclick="submitMatch()">試合結果を登録</button>
+<div id="matchResult"></div>
+</section>
+
+<section id="players" class="panel">
+<div class="row"><input id="playerName" placeholder="選手名"><button class="action" onclick="addPlayer()">選手追加</button></div>
+<div id="playerList"></div>
+</section>
+
+<section id="ranking" class="panel"><div id="rankingList"></div></section>
+
+<section id="stats" class="panel">
+<div class="row"><select id="statsPlayer"></select></div>
+<div id="statsContent"></div>
+</section>
+
+<section id="history" class="panel">
+<div class="row"><button class="action danger" onclick="clearHistory()">履歴を全削除</button></div>
+<div class="small">※履歴・成績のみ削除し、各形式のレートはリセットしません。</div>
+<div id="historyList"></div>
+</section>
+</div>
+
+<script>
+/*
+ * Rating System 開発版03
+ * ----------------------
+ * 開発版01をベースにしたレート計算改良版。
+ *
+ * 2人戦:
+ *   ・相手とのレート差を基本変動量に反映
+ *   ・スコア差を連続的に反映
+ *   ・格上の僅差勝利では変動を極小化し、条件によっては微減も許容
+ *   ・格下勝利は大きく加点
+ *   ・最大変動は±30
+ *
+ * 3・4人戦:
+ *   ・既存の期待順位方式を維持
+ *   ・期待順位、実順位、スコアを使用
+ */
+const CENTER=3000;
+const KEY="rating-system-development-v2";
+let data={players:[],matches:[]};
+let storageOK=true;
+try{
+  const raw=localStorage.getItem(KEY);
+  if(raw){
+    const parsed=JSON.parse(raw);
+    if(parsed&&Array.isArray(parsed.players)) data=parsed;
+  }
+}catch(e){
+  storageOK=false;
+  console.warn("localStorage unavailable; using temporary in-memory data",e);
+}
+if(!Array.isArray(data.matches))data.matches=[];
+const save=()=>{
+  if(!storageOK)return;
+  try{localStorage.setItem(KEY,JSON.stringify(data));}
+  catch(e){storageOK=false;console.warn("localStorage save failed",e);}
+};
+const esc=s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const rk=f=>"rating"+f;
+const getR=(p,f)=>{init(p);return p[rk(f)]};
+const totalRate=p=>{let n=p.totalGameWins+p.totalGameLosses;return n?p.totalGameWins/n*100:0};
+const rate=(p,f)=>{let s=p.formatStats[f],n=s.wins+s.losses;return n?s.wins/n*100:0};
+
+function init(p){
+if(typeof p.rating3!=="number")p.rating3=typeof p.rating==="number"?p.rating:CENTER;
+if(typeof p.rating5!=="number")p.rating5=typeof p.rating==="number"?p.rating:CENTER;
+if(typeof p.rating10!=="number")p.rating10=typeof p.rating==="number"?p.rating:CENTER;
+[3,5,10].forEach(f=>{
+if(typeof p["peak"+f]!=="number")p["peak"+f]=p[rk(f)];
+if(typeof p["floor"+f]!=="number")p["floor"+f]=p[rk(f)];
+});
+if(typeof p.wins!=="number")p.wins=0;
+if(typeof p.losses!=="number")p.losses=0;
+if(typeof p.games!=="number")p.games=0;
+if(typeof p.pointsFor!=="number")p.pointsFor=0;
+if(typeof p.pointsAgainst!=="number")p.pointsAgainst=0;
+if(typeof p.totalGameWins!=="number")p.totalGameWins=0;
+if(typeof p.totalGameLosses!=="number")p.totalGameLosses=0;
+if(!p.formatStats)p.formatStats={};
+[3,5,10].forEach(f=>{
+if(!p.formatStats[f])p.formatStats[f]={wins:0,losses:0,currentStreak:0,maxStreak:0,players:{}};
+let s=p.formatStats[f];
+if(!s.players)s.players={};
+[2,3,4].forEach(n=>{if(!s.players[n])s.players[n]={wins:0,losses:0}});
+});
+}
+data.players.forEach(init);
+
+function activateTab(t){
+  if(!t)return;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active");
+  const panel=document.getElementById(t.dataset.tab);
+  if(panel)panel.classList.add("active");
+}
+
+
+function addPlayer(){
+let i=document.getElementById("playerName"),name=i.value.trim();
+if(!name)return alert("選手名を入力してください。");
+if(data.players.some(p=>p.name.trim()===name))return alert("同じ名前の選手が存在します。");
+let p={id:crypto.randomUUID(),name,rating3:CENTER,rating5:CENTER,rating10:CENTER,
+peak3:CENTER,peak5:CENTER,peak10:CENTER,floor3:CENTER,floor5:CENTER,floor10:CENTER,
+wins:0,losses:0,games:0,pointsFor:0,pointsAgainst:0,totalGameWins:0,totalGameLosses:0,formatStats:{}};
+[3,5,10].forEach(f=>p.formatStats[f]={wins:0,losses:0,currentStreak:0,maxStreak:0,players:{2:{wins:0,losses:0},3:{wins:0,losses:0},4:{wins:0,losses:0}}});
+data.players.push(p);i.value="";save();refresh();
+}
+
+function deletePlayer(id){
+let p=data.players.find(x=>x.id===id);
+if(p&&confirm(p.name+"を削除しますか？")){data.players=data.players.filter(x=>x.id!==id);save();refresh();}
+}
+
+function renderInputs(){
+  const formatSelect=document.getElementById("format");
+  const playerCountSelect=document.getElementById("playerCount");
+  let n=+playerCountSelect.value,f=+formatSelect.value,a=document.getElementById("scoreInputs");
+  let old=[...a.querySelectorAll(".player-hidden")].map(x=>x.value);
+  let oldScores=[...a.querySelectorAll(".score")].map(x=>x.value);
+
+  a.innerHTML='<div class="score-row"><strong>選手</strong><strong>獲得本数</strong></div>'+
+    Array.from({length:n},(_,i)=>{
+      let selectedId=old[i]||"";
+      let selected=data.players.find(p=>p.id===selectedId);
+      let selectedName=selected?selected.name:"";
+      return `
+      <div class="score-row player-entry" data-index="${i}">
+        <div class="autocomplete-wrap">
+          <input class="player-search" type="text" placeholder="選手名を入力" autocomplete="off" value="${esc(selectedName)}">
+          <input class="player-hidden" type="hidden" value="${esc(selectedId)}">
+          <div class="autocomplete-list"></div>
+        </div>
+        <input class="score" type="number" min="0" value="${oldScores[i]!==undefined?oldScores[i]:(i===0?f:0)}">
+      </div>`;
+    }).join("");
+
+  setupPlayerSearches();
+}
+
+function setupPlayerSearches(){
+  document.querySelectorAll(".player-entry").forEach(row=>{
+    const input=row.querySelector(".player-search");
+    const hidden=row.querySelector(".player-hidden");
+    const list=row.querySelector(".autocomplete-list");
+
+    const renderCandidates=()=>{
+      const q=input.value.trim().toLowerCase();
+      const candidates=data.players.filter(p=>
+        p.name.toLowerCase().includes(q)
+      ).slice(0,20);
+
+      if(!candidates.length){
+        list.innerHTML='<div class="autocomplete-empty">候補がありません</div>';
+        list.style.display="block";
+        return;
+      }
+
+      list.innerHTML=candidates.map(p=>
+        `<div class="autocomplete-item" data-id="${p.id}">${esc(p.name)}</div>`
+      ).join("");
+      list.style.display="block";
+
+      list.querySelectorAll(".autocomplete-item").forEach(item=>{
+        item.onclick=()=>{
+          const p=data.players.find(x=>x.id===item.dataset.id);
+          if(!p)return;
+          input.value=p.name;
+          hidden.value=p.id;
+          list.style.display="none";
+        };
+      });
+    };
+
+    input.onfocus=renderCandidates;
+
+    input.oninput=()=>{
+      hidden.value="";
+      renderCandidates();
+    };
+
+    input.onkeydown=e=>{
+      if(e.key==="Enter"){
+        e.preventDefault();
+        const first=list.querySelector(".autocomplete-item");
+        if(first)first.click();
+      }
+    };
+
+    document.addEventListener("click",e=>{
+      if(!row.contains(e.target))list.style.display="none";
+    });
+  });
+}
+
+document.getElementById("format").onchange=()=>{
+renderInputs();
+let s=document.querySelector(".score");
+if(s)s.value=+document.getElementById("format").value;
+};
+
+document.getElementById("playerCount").onchange=renderInputs;
+
+const canon=a=>a.slice().sort((x,y)=>x.playerId.localeCompare(y.playerId)).map(x=>({playerId:x.playerId,score:x.score}));
+
+function submitMatch(){
+const f=+document.getElementById("format").value,n=+document.getElementById("playerCount").value;
+const ss=[...document.querySelectorAll(".player-hidden")],vs=[...document.querySelectorAll(".score")];
+const entries=ss.map((s,i)=>({playerId:s.value,score:+vs[i].value}));
+
+if(entries.some(x=>!x.playerId||!data.players.some(p=>p.id===x.playerId)))
+return alert("すべての選手を候補から選択してください。");
+
+if(new Set(entries.map(x=>x.playerId)).size!==n)
+return alert("同じ選手を複数選択できません。");
+
+if(entries.some(x=>!Number.isInteger(x.score)||x.score<0))
+return alert("獲得本数を正しく入力してください。");
+
+const max=Math.max(...entries.map(x=>x.score));
+
+if(max!==f)
+return alert(`${f}先なので、1位の獲得本数は${f}にしてください。`);
+
+if(entries.filter(x=>x.score===max).length>1)
+return alert("同点は現在の仕様では登録できません。");
+
+const p={
+id:crypto.randomUUID(),
+createdAt:new Date().toLocaleString("ja-JP"),
+format:f,
+playerCount:n,
+participantIds:entries.map(x=>x.playerId),
+entries:canon(entries)
+};
+
+apply(p);
+save();
+
+document.getElementById("matchResult").innerHTML=`
+<div class="result-box">
+  <span class="win">試合結果を登録しました</span>
+  <div style="margin-top:8px">
+    ${p.deltas.map(d=>{
+      let pl=data.players.find(x=>x.id===d.id);
+      let cls=d.d>=0?"positive":"negative";
+      return `
+      <div style="margin-bottom:5px">
+        <strong>${esc(pl.name)}</strong>：
+        ${d.oldRating} →
+        <strong>${d.newRating}</strong>
+        <span class="${cls}">
+          (${d.d>=0?"+":""}${d.d})
+        </span>
+      </div>`;
+    }).join("")}
+  </div>
+</div>`;
+
+refresh();
+}
+
+
+/* 2人戦：合意済みの±15基準テーブル。
+   3・4人戦：期待順位との差で配分。2位でも期待以上ならプラスになり得ます。 */
+
+function ratingChangeByGap(gap,isUpset){
+
+const normal=[
+[0,15],
+[100,14],
+[200,13],
+[300,12],
+[400,11],
+[500,10],
+[600,9],
+[800,5],
+[1000,2],
+[1200,1]
+];
+
+const upset=[
+[0,15],
+[100,16],
+[200,17],
+[300,18],
+[400,19],
+[500,20],
+[600,21],
+[800,25],
+[1000,28],
+[1200,30]
+];
+
+const pts=isUpset?upset:normal;
+
+if(gap>=1200)
+return isUpset?30:1;
+
+for(let i=0;i<pts.length-1;i++){
+
+let [x1,y1]=pts[i],
+    [x2,y2]=pts[i+1];
+
+if(gap>=x1&&gap<=x2){
+
+let t=(gap-x1)/(x2-x1);
+
+return Math.max(
+1,
+Math.min(
+30,
+Math.round(
+y1+(y2-y1)*t
+)
+)
+);
+
+}
+
+}
+
+return 1;
+}
+
+
+function ratingMultiplier(format, playerCount){
+  // 3先・2人戦を基準(1.00倍)として、
+  // 試合時間が長いほど、また人数が多いほど変動量を少し大きくする。
+  const formatMultiplier = {
+    3: 1.00,
+    5: 1.10,
+    10: 1.20
+  }[format] || 1.00;
+
+  const playerMultiplier = {
+    2: 1.00,
+    3: 1.35,
+    4: 1.70
+  }[playerCount] || 1.00;
+
+  return formatMultiplier * playerMultiplier;
+}
+
+function calculateRatingChange(
+  winner,
+  loser,
+  winnerScore,
+  loserScore,
+  format
+){
+  const wr=getR(winner,format);
+  const lr=getR(loser,format);
+  const gap=Math.abs(wr-lr);
+
+  /*
+   * 基本変動:
+   * これまで使用していたレート差テーブルをそのまま維持。
+   * 格上勝利ほど小さく、格下勝利ほど大きくする。
+   */
+  const base=ratingChangeByGap(gap,wr<lr);
+
+  /*
+   * スコア差:
+   * 勝者が何本差で勝ったかを0〜1に正規化。
+   * 3先なら最大2本差、5先なら最大4本差、10先なら最大9本差。
+   */
+  const maxMargin=Math.max(1,format-1);
+  const margin=Math.max(0,winnerScore-loserScore);
+  const marginRatio=Math.min(1,margin/maxMargin);
+
+  // 大差になるほど最大+7。
+  let bonus=Math.round(7*marginRatio);
+
+  let d;
+  if(wr<lr){
+    // 格上が勝った場合。僅差なら基本値を抑え、圧勝ならスコア補正。
+    const closenessPenalty=Math.round(3*(1-marginRatio));
+    d=base-closenessPenalty+bonus;
+  }else{
+    // 格下または同格が勝った場合。
+    d=base+bonus;
+  }
+
+  // 大幅な格上が僅差で勝った場合は、ほぼ増えない/微減もあり得る。
+  if(wr>lr && gap>=300 && marginRatio<=0.25){
+    d-=1;
+  }
+
+  return Math.max(0,Math.min(30,Math.round(d)));
+}
+
+function deltas(p){
+
+const f=p.format;
+
+const e=p.entries
+.map(x=>({
+...x,
+r:getR(
+data.players.find(
+q=>q.id===x.playerId
+),
+f
+)
+}))
+.sort(
+(a,b)=>b.score-a.score
+);
+
+const n=e.length;
+
+
+if(n===2){
+
+let w=e[0],
+    l=e[1];
+
+let d=
+calculateRatingChange(
+data.players.find(
+q=>q.id===w.playerId
+),
+data.players.find(
+q=>q.id===l.playerId
+),
+w.score,
+l.score,
+f
+);
+
+// 先数・人数に応じて最終変動量を調整。
+const multiplier=ratingMultiplier(f,n);
+d=Math.max(0,Math.round(d*multiplier));
+
+return[
+{
+id:w.playerId,
+d,
+rank:1,
+score:w.score
+},
+{
+id:l.playerId,
+d:-d,
+rank:2,
+score:l.score
+}
+];
+
+}
+
+
+/* 3人・4人戦 */
+
+const raw=e.map((x,i)=>{
+
+const expected=
+e.reduce(
+(sum,o,j)=>
+j===i
+?sum
+:sum+
+1/
+(
+1+
+Math.pow(
+10,
+(o.r-x.r)/600
+)
+),
+0
+)/(n-1);
+
+const actual=
+(n-1-i)/(n-1);
+
+const scoreNorm=
+(x.score-e[n-1].score)
+/
+Math.max(
+1,
+f-e[n-1].score
+);
+
+return{
+...x,
+rank:i+1,
+raw:
+60*(actual-expected)
++
+5*(scoreNorm-.5)
+};
+
+});
+
+
+const avg=
+raw.reduce(
+(s,x)=>s+x.raw,
+0
+)/n;
+
+raw.forEach(
+x=>x.raw-=avg
+);
+
+
+const multiplier=ratingMultiplier(f,n);
+
+let out=
+raw.map(x=>({
+...x,
+d:
+Math.max(
+-40,
+Math.min(
+40,
+Math.round(x.raw*multiplier)
+)
+)
+}));
+
+
+let sum=
+out.reduce(
+(s,x)=>s+x.d,
+0
+);
+
+
+while(sum!==0){
+
+let x=
+out
+.slice()
+.sort(
+(a,b)=>
+Math.abs(a.raw)-
+Math.abs(b.raw)
+)
+.find(
+q=>
+sum>0
+?q.d>-30
+:q.d<30
+);
+
+if(!x)
+break;
+
+x.d+=
+sum>0
+?-1
+:1;
+
+sum+=
+sum>0
+?-1
+:1;
+
+}
+
+
+return out.map(x=>({
+id:x.playerId,
+d:x.d,
+rank:x.rank,
+score:x.score
+}));
+
+}
+
+
+function updateFormatStats(
+p,
+f,
+won
+){
+
+let s=p.formatStats[f];
+
+if(won){
+
+s.wins++;
+
+s.currentStreak=
+s.currentStreak>=0
+?s.currentStreak+1
+:1;
+
+s.maxStreak=
+Math.max(
+s.maxStreak,
+s.currentStreak
+);
+
+}else{
+
+s.losses++;
+
+s.currentStreak=
+s.currentStreak<=0
+?s.currentStreak-1
+:-1;
+
+}
+
+}
+
+
+function apply(p){
+
+const f=p.format,
+n=p.playerCount,
+ds=deltas(p),
+max=Math.max(
+...p.entries.map(
+x=>x.score
+)
+);
+
+p.deltas=ds;
+
+
+ds.forEach(d=>{
+
+let pl=
+data.players.find(
+x=>x.id===d.id
+);
+
+if(!pl)
+return;
+
+init(pl);
+
+let s=
+pl.formatStats[f];
+
+let ps=
+s.players[n];
+
+let e=
+p.entries.find(
+x=>x.playerId===pl.id
+);
+
+let win=
+e.score===max;
+
+
+const oldRating=
+pl[rk(f)];
+
+pl[rk(f)]+=d.d;
+
+const newRating=
+pl[rk(f)];
+
+d.oldRating=
+oldRating;
+
+d.newRating=
+newRating;
+
+
+pl.wins+=
+win?1:0;
+
+pl.losses+=
+win?0:1;
+
+pl.games++;
+
+pl.pointsFor+=
+e.score;
+
+pl.pointsAgainst+=
+f-e.score;
+
+pl.totalGameWins+=
+e.score;
+
+pl.totalGameLosses+=
+f-e.score;
+
+
+updateFormatStats(
+pl,
+f,
+win
+);
+
+ps[
+win
+?"wins"
+:"losses"
+]++;
+
+
+pl["peak"+f]=
+Math.max(
+pl["peak"+f],
+pl[rk(f)]
+);
+
+pl["floor"+f]=
+Math.min(
+pl["floor"+f],
+pl[rk(f)]
+);
+
+});
+
+
+data.matches.unshift({
+id:p.id,
+date:p.createdAt,
+format:f,
+playerCount:n,
+entries:p.entries,
+deltas:ds
+});
+
+}
+
+
+function renderPlayers(){
+
+let a=
+document.getElementById(
+"playerList"
+);
+
+if(!data.players.length){
+
+a.innerHTML=
+'<p class="small">'+
+'選手が登録されていません。'+
+'</p>';
+
+return;
+
+}
+
+a.innerHTML=
+data.players
+.slice()
+.sort(
+(a,b)=>
+b.rating3-a.rating3
+)
+.map(
+(p,i)=>
+
+`<div class="card">
+
+<strong>
+${i+1}. ${esc(p.name)}
+</strong>
+
+<div
+class="small"
+style="margin-top:5px"
+>
+
+3先
+<strong>
+${p.rating3}
+</strong>
+
+／
+
+5先
+<strong>
+${p.rating5}
+</strong>
+
+／
+
+10先
+<strong>
+${p.rating10}
+</strong>
+
+</div>
+
+<div
+class="small"
+style="margin-top:4px"
+>
+
+通算
+${p.wins}勝
+${p.losses}敗
+
+／
+
+勝率
+${totalRate(p).toFixed(1)}%
+
+</div>
+
+<div
+style="margin-top:6px"
+>
+
+<button
+class="action danger"
+onclick="deletePlayer('${p.id}')"
+>
+削除
+</button>
+
+</div>
+
+</div>`
+
+)
+.join("");
+
+}
+
+
+function rankingTable(f){
+
+let ps=
+data.players
+.slice()
+.sort(
+(a,b)=>
+getR(b,f)-
+getR(a,f)
+);
+
+return `
+
+<div class="card">
+
+<div class="stat-title">
+${f}先ランキング
+</div>
+
+<table>
+
+<thead>
+
+<tr>
+<th>順位</th>
+<th>選手</th>
+<th>レート</th>
+<th>勝敗</th>
+<th>勝率</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+${ps.map(
+(p,i)=>
+
+`<tr>
+
+<td>
+${i+1}
+</td>
+
+<td>
+${esc(p.name)}
+</td>
+
+<td>
+<strong>
+${getR(p,f)}
+</strong>
+</td>
+
+<td>
+${p.formatStats[f].wins}
+-
+${p.formatStats[f].losses}
+</td>
+
+<td>
+${rate(p,f).toFixed(1)}%
+</td>
+
+</tr>`
+
+).join("")}
+
+</tbody>
+
+</table>
+
+</div>
+
+`;
+
+}
+
+
+function renderRanking(){
+
+document.getElementById(
+"rankingList"
+).innerHTML=
+
+data.players.length
+
+?rankingTable(3)+
+ rankingTable(5)+
+ rankingTable(10)
+
+:'<p class="small">'+
+ '選手が登録されていません。'+
+ '</p>';
+
+}
+
+
+function renderStats(){
+
+let s=
+document.getElementById(
+"statsPlayer"
+);
+
+let old=s.value;
+
+s.innerHTML=
+data.players.map(
+p=>
+`<option value="${p.id}">
+${esc(p.name)}
+</option>`
+).join("");
+
+if(
+data.players.some(
+p=>p.id===old
+)
+)
+s.value=old;
+
+
+let p=
+data.players.find(
+x=>x.id===s.value
+);
+
+let a=
+document.getElementById(
+"statsContent"
+);
+
+
+if(!p){
+
+a.innerHTML=
+'<p class="small">'+
+'選手が登録されていません。'+
+'</p>';
+
+return;
+
+}
+
+
+let st=x=>
+x===0
+?"0"
+:x>0
+?x+"連勝"
+:Math.abs(x)+"連敗";
+
+
+a.innerHTML=
+
+`<div class="card">
+
+<div class="rating">
+${p.rating3}
+</div>
+
+<div>
+${esc(p.name)}
+</div>
+
+</div>
+
+
+<div class="card">
+
+<div class="stat-title">
+通算成績
+</div>
+
+<div class="stat-grid">
+
+<div class="stat-box">
+
+ゲーム勝敗
+<br>
+
+<strong>
+${p.totalGameWins}勝
+${p.totalGameLosses}敗
+</strong>
+
+</div>
+
+<div class="stat-box">
+
+勝率
+<br>
+
+<strong>
+${totalRate(p).toFixed(1)}%
+</strong>
+
+</div>
+
+</div>
+
+</div>
+
+
+${[3,5,10].map(
+f=>{
+
+let x=p.formatStats[f];
+
+return `
+
+<div class="card">
+
+<div class="stat-title">
+${f}先
+</div>
+
+<div class="rating-summary">
+
+<div class="stat-box">
+
+<div class="small">
+現在レート
+</div>
+
+<strong>
+${p[rk(f)]}
+</strong>
+
+</div>
+
+
+<div class="stat-box">
+
+<div class="small">
+最高レート
+</div>
+
+<strong>
+${p["peak"+f]}
+</strong>
+
+</div>
+
+
+<div class="stat-box">
+
+<div class="small">
+最低レート
+</div>
+
+<strong>
+${p["floor"+f]}
+</strong>
+
+</div>
+
+</div>
+
+
+<div
+class="stat-grid"
+style="margin-top:8px"
+>
+
+<div class="stat-box">
+
+シリーズ成績
+<br>
+
+<strong>
+${x.wins}勝
+${x.losses}敗
+</strong>
+
+</div>
+
+
+<div class="stat-box">
+
+シリーズ勝率
+<br>
+
+<strong>
+${rate(p,f).toFixed(1)}%
+</strong>
+
+</div>
+
+
+<div class="stat-box">
+
+現在
+<br>
+
+<strong>
+${st(x.currentStreak)}
+</strong>
+
+</div>
+
+
+<div class="stat-box">
+
+最高連勝
+<br>
+
+<strong>
+${x.maxStreak}
+</strong>
+
+</div>
+
+</div>
+
+
+<div
+class="small"
+style="margin-top:8px"
+>
+
+2人戦
+${x.players[2].wins}勝
+${x.players[2].losses}敗
+
+／
+
+3人戦
+${x.players[3].wins}勝
+${x.players[3].losses}敗
+
+／
+
+4人戦
+${x.players[4].wins}勝
+${x.players[4].losses}敗
+
+</div>
+
+</div>
+
+`;
+
+}
+).join("")}
+
+
+<div class="card">
+
+<div class="stat-title">
+1試合ごとの勝敗
+</div>
+
+${renderPersonalHistory(p)}
+
+</div>`;
+
+}
+
+
+function renderPersonalHistory(player){
+
+const ms=
+data.matches.filter(
+m=>
+m.entries
+?m.entries.some(
+e=>e.playerId===player.id
+)
+:(m.winnerId===player.id||
+m.loserId===player.id)
+);
+
+
+if(!ms.length)
+
+return`
+<div class="small">
+試合履歴がありません。
+</div>
+`;
+
+
+return ms.map(
+m=>{
+
+if(m.entries){
+
+let me=
+m.entries.find(
+e=>e.playerId===player.id
+);
+
+let d=
+(m.deltas||[])
+.find(
+x=>x.id===player.id
+);
+
+let rank=
+d?.rank||"-";
+
+
+let names=
+m.entries
+.slice()
+.sort(
+(a,b)=>b.score-a.score
+)
+.map(
+(e,i)=>
+`${i+1}位
+${esc(
+data.players.find(
+p=>p.id===e.playerId
+)?.name||""
+)}
+${e.score}`
+)
+.join(" ／ ");
+
+
+return`
+
+<div class="card">
+
+<div class="small">
+${m.date}
+／
+${m.format}先
+／
+${m.playerCount}人戦
+</div>
+
+<div
+style="margin-top:5px"
+>
+
+<span
+class="${d&&d.d>=0?"win":"loss"}"
+>
+
+${d&&d.d>=0?"+":""}
+${d?d.d:"-"}
+
+</span>
+
+／
+
+${rank}位
+
+／
+
+${me.score}本
+
+</div>
+
+<div class="small">
+${names}
+</div>
+
+</div>
+
+`;
+
+}
+
+
+let won=
+m.winnerId===player.id;
+
+let op=
+won
+?m.loserName
+:m.winnerName;
+
+let my=
+won
+?m.winnerScore
+:m.loserScore;
+
+let opp=
+won
+?m.loserScore
+:m.winnerScore;
+
+let d=
+won
+?m.delta
+:-m.delta;
+
+
+return`
+
+<div class="card">
+
+<div class="small">
+${m.date}
+／
+${m.format}先
+</div>
+
+<div
+style="margin-top:5px"
+>
+
+<span
+class="${won?"win":"loss"}"
+>
+
+${won?"WIN":"LOSS"}
+
+</span>
+
+／
+
+${esc(op)}
+
+／
+
+${my}-${opp}
+
+</div>
+
+
+<div class="small">
+
+レート変動
+
+<span
+class="${d>=0?"positive":"negative"}"
+>
+
+${d>=0?"+":""}${d}
+
+</span>
+
+</div>
+
+</div>
+
+`;
+
+}
+).join("");
+
+}
+
+
+function renderHistory(){
+
+let a=
+document.getElementById(
+"historyList"
+);
+
+let h="";
+
+
+data.matches.forEach(
+m=>{
+
+if(m.entries){
+
+let rows=
+
+m.entries
+.slice()
+.sort(
+(x,y)=>y.score-x.score
+)
+.map(
+(e,i)=>{
+
+let d=
+(m.deltas||[])
+.find(
+x=>x.id===e.playerId
+);
+
+return`
+
+${i+1}位
+
+${esc(
+data.players.find(
+p=>p.id===e.playerId
+)?.name||""
+)}
+
+${e.score}本
+
+${d
+?(d.d>=0?"+":"")+d.d
+:""
+}
+
+`;
+
+}
+)
+.join(" ／ ");
+
+
+h+=`
+
+<div class="card">
+
+<div class="small">
+
+${m.date}
+／
+${m.format}先
+／
+${m.playerCount}人戦
+
+</div>
+
+<div>
+${rows}
+</div>
+
+</div>
+
+`;
+
+}else{
+
+h+=`
+
+<div class="card">
+
+<div class="small">
+
+${m.date}
+／
+${m.format}先
+
+</div>
+
+<div>
+
+<strong>
+${esc(m.winnerName)}
+</strong>
+
+${m.winnerScore}
+-
+${m.loserScore}
+
+${esc(m.loserName)}
+
+</div>
+
+<div class="small">
+
+${m.winnerOldRating}
+→
+${m.winnerNewRating}
+
+／
+
+${m.loserOldRating}
+→
+${m.loserNewRating}
+
+／
+
+<span class="positive">
++${m.delta}
+</span>
+
+<span class="negative">
+-${m.delta}
+</span>
+
+</div>
+
+</div>
+
+`;
+
+}
+
+}
+);
+
+
+a.innerHTML=
+h||
+'<p class="small">'+
+'試合履歴がありません。'+
+'</p>';
+
+}
+
+
+function clearHistory(){
+
+if(
+!confirm(
+"履歴と成績を削除しますか？\n"+
+"レートはリセットされません。"
+)
+)
+return;
+
+
+data.matches=[];
+
+
+data.players.forEach(
+p=>{
+
+init(p);
+
+p.wins=0;
+p.losses=0;
+p.games=0;
+
+p.pointsFor=0;
+p.pointsAgainst=0;
+
+p.totalGameWins=0;
+p.totalGameLosses=0;
+
+
+[3,5,10].forEach(
+f=>
+
+p.formatStats[f]={
+
+wins:0,
+losses:0,
+
+currentStreak:0,
+maxStreak:0,
+
+players:{
+2:{
+wins:0,
+losses:0
+},
+
+3:{
+wins:0,
+losses:0
+},
+
+4:{
+wins:0,
+losses:0
+}
+
+}
+
+}
+
+);
+
+}
+);
+
+
+save();
+refresh();
+
+}
+
+
+document.getElementById(
+"statsPlayer"
+).onchange=renderStats;
+
+
+function refresh(){
+
+data.players.forEach(init);
+
+renderInputs();
+renderPlayers();
+renderRanking();
+renderStats();
+renderHistory();
+
+save();
+
+}
+
+
+refresh();
+
+</script>
+</body>
+</html>
