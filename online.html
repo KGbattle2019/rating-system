@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KGbattle2019 Online</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 520px;
+      margin: 30px auto;
+      padding: 16px;
+      background: #f4f5f7;
+      color: #222;
+    }
+    section {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 11px;
+      margin: 6px 0;
+      font: inherit;
+    }
+    button {
+      background: #222;
+      color: white;
+      border: 0;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    #status { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>KGbattle2019 Online</h1>
+
+  <section>
+    <h2>Supabase接続設定</h2>
+    <p>下の2か所に自分の接続情報を設定してください。</p>
+    <label for="projectUrl">Project URL</label>
+    <input id="projectUrl" placeholder="https://....supabase.co">
+
+    <label for="publishableKey">Publishable key</label>
+    <input id="publishableKey" placeholder="sb_publishable_..." autocomplete="off">
+
+    <button id="connectBtn">接続を確認</button>
+  </section>
+
+  <section>
+    <h2>ログイン・新規登録</h2>
+    <label for="email">メールアドレス</label>
+    <input id="email" type="email" autocomplete="email">
+
+    <label for="password">パスワード（6文字以上）</label>
+    <input id="password" type="password" autocomplete="current-password">
+
+    <button id="signupBtn">新規登録</button>
+    <button id="loginBtn">ログイン</button>
+    <button id="logoutBtn">ログアウト</button>
+    <p id="status">接続設定を入力してください。</p>
+  </section>
+
+  <script>
+    let supabaseClient = null;
+
+    const statusEl = document.getElementById("status");
+    const showStatus = (message) => {
+      statusEl.textContent = message;
+    };
+
+    document.getElementById("connectBtn").onclick = async () => {
+      const url = document.getElementById("projectUrl").value.trim();
+      const key = document.getElementById("publishableKey").value.trim();
+
+      if (!url || !key) {
+        showStatus("Project URLとPublishable keyを入力してください。");
+        return;
+      }
+
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".supabase.co")) {
+          showStatus("Project URLを確認してください。");
+          return;
+        }
+
+        supabaseClient = window.supabase.createClient(url, key);
+        const { error } = await supabaseClient.auth.getSession();
+
+        if (error) throw error;
+
+        showStatus("Supabaseに接続できました。");
+      } catch (error) {
+        showStatus("接続エラー：" + error.message);
+      }
+    };
+
+    document.getElementById("signupBtn").onclick = async () => {
+      if (!supabaseClient) {
+        showStatus("先に接続を確認してください。");
+        return;
+      }
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!email || password.length < 6) {
+        showStatus("メールアドレスと6文字以上のパスワードを入力してください。");
+        return;
+      }
+
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password
+      });
+
+      if (error) {
+        showStatus("登録エラー：" + error.message);
+      } else if (data.session) {
+        showStatus("登録・ログインできました！");
+      } else {
+        showStatus("登録を受け付けました。確認メールが届いた場合は、メール内のリンクを開いてください。");
+      }
+    };
+
+    document.getElementById("loginBtn").onclick = async () => {
+      if (!supabaseClient) {
+        showStatus("先に接続を確認してください。");
+        return;
+      }
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        showStatus("ログインエラー：" + error.message);
+      } else {
+        showStatus("ログイン成功：" + data.user.email);
+      }
+    };
+
+    document.getElementById("logoutBtn").onclick = async () => {
+      if (!supabaseClient) {
+        showStatus("先に接続を確認してください。");
+        return;
+      }
+
+      const { error } = await supabaseClient.auth.signOut();
+      showStatus(error ? "ログアウトエラー：" + error.message : "ログアウトしました。");
+    };
+  </script>
+</body>
+</html>
