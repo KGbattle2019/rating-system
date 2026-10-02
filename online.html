@@ -5,161 +5,475 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KGbattle2019 Online</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: system-ui, sans-serif;
-      max-width: 520px;
-      margin: 30px auto;
-      padding: 16px;
-      background: #f4f5f7;
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f5f9;
       color: #222;
     }
-    section {
+
+    .container {
+      max-width: 520px;
+      margin: 25px auto;
+      padding: 24px;
       background: white;
-      padding: 20px;
-      border-radius: 12px;
-      margin-bottom: 16px;
+      border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
     }
-    input, button {
-      box-sizing: border-box;
+
+    h1 {
+      margin: 0 0 8px;
+      text-align: center;
+      font-size: 25px;
+    }
+
+    .description {
+      margin-bottom: 24px;
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+    }
+
+    h2 {
+      margin-top: 26px;
+      font-size: 18px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 8px;
+    }
+
+    label {
+      display: block;
+      margin: 15px 0 6px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    input {
+      display: block;
       width: 100%;
-      padding: 11px;
-      margin: 6px 0;
-      font: inherit;
-    }
-    button {
-      background: #222;
-      color: white;
-      border: 0;
+      padding: 12px;
+      border: 1px solid #ccc;
       border-radius: 7px;
+      font-size: 15px;
+      background: white;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 12px;
+      padding: 13px;
+      border: none;
+      border-radius: 8px;
+      background: #2563eb;
+      color: white;
+      font-size: 15px;
+      font-weight: bold;
       cursor: pointer;
     }
-    #status { overflow-wrap: anywhere; }
+
+    button:hover {
+      filter: brightness(0.94);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .secondary {
+      background: #475569;
+    }
+
+    .danger {
+      background: #dc2626;
+    }
+
+    #status {
+      margin-top: 18px;
+      padding: 13px;
+      border-radius: 8px;
+      background: #f1f5f9;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .note {
+      margin-top: 12px;
+      color: #666;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .user-info {
+      padding: 12px;
+      background: #eff6ff;
+      border-radius: 8px;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
   </style>
 </head>
-<body>
-  <h1>KGbattle2019 Online</h1>
 
-  <section>
-    <h2>Supabase接続設定</h2>
-    <p>下の2か所に自分の接続情報を設定してください。</p>
+<body>
+  <main class="container">
+    <h1>KGbattle2019 Online</h1>
+    <p class="description">オンライン機能・アカウント接続テスト</p>
+
+    <h2>1. Supabase設定</h2>
+
     <label for="projectUrl">Project URL</label>
-    <input id="projectUrl" placeholder="https://....supabase.co">
+    <input
+      id="projectUrl"
+      type="url"
+      placeholder="https://xxxxxxxx.supabase.co"
+      autocomplete="url"
+    >
 
     <label for="publishableKey">Publishable key</label>
-    <input id="publishableKey" placeholder="sb_publishable_..." autocomplete="off">
+    <input
+      id="publishableKey"
+      type="password"
+      placeholder="sb_publishable_..."
+      autocomplete="off"
+    >
 
-    <button id="connectBtn">接続を確認</button>
-  </section>
+    <button id="connectBtn" type="button">
+      設定を確認して接続
+    </button>
 
-  <section>
-    <h2>ログイン・新規登録</h2>
+    <p class="note">
+      SupabaseのProject URLとPublishable keyを入力してください。
+      Secret keyやservice_role keyは入力しないでください。
+    </p>
+
+    <h2>2. プレイヤー登録</h2>
+
+    <label for="displayName">プレイヤー名</label>
+    <input
+      id="displayName"
+      type="text"
+      placeholder="プレイヤー名"
+      maxlength="30"
+      autocomplete="nickname"
+    >
+
     <label for="email">メールアドレス</label>
-    <input id="email" type="email" autocomplete="email">
+    <input
+      id="email"
+      type="email"
+      placeholder="example@email.com"
+      autocomplete="email"
+    >
 
-    <label for="password">パスワード（6文字以上）</label>
-    <input id="password" type="password" autocomplete="current-password">
+    <label for="password">パスワード</label>
+    <input
+      id="password"
+      type="password"
+      placeholder="6文字以上"
+      minlength="6"
+      autocomplete="current-password"
+    >
 
-    <button id="signupBtn">新規登録</button>
-    <button id="loginBtn">ログイン</button>
-    <button id="logoutBtn">ログアウト</button>
-    <p id="status">接続設定を入力してください。</p>
-  </section>
+    <button id="signupBtn" type="button">
+      新規プレイヤー登録
+    </button>
+
+    <button id="loginBtn" type="button" class="secondary">
+      ログイン
+    </button>
+
+    <h2>3. ログイン状態</h2>
+
+    <div id="userInfo" class="user-info">
+      ログインしていません。
+    </div>
+
+    <button id="checkBtn" type="button" class="secondary">
+      ログイン状態を確認
+    </button>
+
+    <button id="logoutBtn" type="button" class="danger">
+      ログアウト
+    </button>
+
+    <div id="status" role="status" aria-live="polite">
+      Supabaseの設定を入力してください。
+    </div>
+  </main>
 
   <script>
-    let supabaseClient = null;
+    (() => {
+      "use strict";
 
-    const statusEl = document.getElementById("status");
-    const showStatus = (message) => {
-      statusEl.textContent = message;
-    };
+      let supabaseClient = null;
+      let busy = false;
 
-    document.getElementById("connectBtn").onclick = async () => {
-      const url = document.getElementById("projectUrl").value.trim();
-      const key = document.getElementById("publishableKey").value.trim();
+      const $ = (id) => document.getElementById(id);
 
-      if (!url || !key) {
-        showStatus("Project URLとPublishable keyを入力してください。");
-        return;
+      const buttons = [
+        "connectBtn",
+        "signupBtn",
+        "loginBtn",
+        "checkBtn",
+        "logoutBtn"
+      ];
+
+      function showStatus(message) {
+        $("status").textContent = message;
       }
 
-      try {
-        const parsed = new URL(url);
-        if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".supabase.co")) {
-          showStatus("Project URLを確認してください。");
+      function setBusy(value) {
+        busy = value;
+
+        buttons.forEach((id) => {
+          $(id).disabled = value;
+        });
+      }
+
+      function getClient() {
+        if (!supabaseClient) {
+          throw new Error(
+            "先にProject URLとPublishable keyを設定し、接続ボタンを押してください。"
+          );
+        }
+
+        return supabaseClient;
+      }
+
+      function getCredentials() {
+        const email = $("email").value.trim();
+        const password = $("password").value;
+
+        if (!email) {
+          throw new Error("メールアドレスを入力してください。");
+        }
+
+        if (!password || password.length < 6) {
+          throw new Error("パスワードは6文字以上で入力してください。");
+        }
+
+        return { email, password };
+      }
+
+      function updateUserInfo(user) {
+        if (!user) {
+          $("userInfo").textContent = "ログインしていません。";
           return;
         }
 
-        supabaseClient = window.supabase.createClient(url, key);
-        const { error } = await supabaseClient.auth.getSession();
+        const name =
+          user.user_metadata?.display_name || "名前未設定";
 
-        if (error) throw error;
-
-        showStatus("Supabaseに接続できました。");
-      } catch (error) {
-        showStatus("接続エラー：" + error.message);
-      }
-    };
-
-    document.getElementById("signupBtn").onclick = async () => {
-      if (!supabaseClient) {
-        showStatus("先に接続を確認してください。");
-        return;
+        $("userInfo").textContent =
+          "ログイン中\n" +
+          "プレイヤー名：" + name + "\n" +
+          "メールアドレス：" + (user.email || "未設定") + "\n" +
+          "ユーザーID：" + user.id;
       }
 
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
+      async function runTask(task) {
+        if (busy) return;
 
-      if (!email || password.length < 6) {
-        showStatus("メールアドレスと6文字以上のパスワードを入力してください。");
-        return;
+        setBusy(true);
+
+        try {
+          await task();
+        } catch (error) {
+          console.error(error);
+
+          showStatus(
+            "エラーが発生しました。\n" +
+            (error.message || String(error))
+          );
+        } finally {
+          setBusy(false);
+        }
       }
 
-      const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password
+      // 1. Supabaseの設定とクライアント初期化
+      $("connectBtn").addEventListener("click", () => {
+        runTask(async () => {
+          if (!window.supabase) {
+            throw new Error(
+              "Supabaseライブラリを読み込めませんでした。通信環境を確認してください。"
+            );
+          }
+
+          const url = $("projectUrl").value.trim();
+          const key = $("publishableKey").value.trim();
+
+          if (!url || !key) {
+            throw new Error(
+              "Project URLとPublishable keyを両方入力してください。"
+            );
+          }
+
+          let parsedUrl;
+
+          try {
+            parsedUrl = new URL(url);
+          } catch {
+            throw new Error("Project URLの形式が正しくありません。");
+          }
+
+          if (
+            parsedUrl.protocol !== "https:" ||
+            parsedUrl.hostname !== "localhost" &&
+            !parsedUrl.hostname.endsWith(".supabase.co")
+          ) {
+            throw new Error(
+              "Supabaseの正しいHTTPS形式のProject URLを入力してください。"
+            );
+          }
+
+          if (
+            !key.startsWith("sb_publishable_") &&
+            !key.startsWith("eyJ")
+          ) {
+            throw new Error(
+              "Publishable keyを確認してください。旧形式のanon keyも使用できます。"
+            );
+          }
+
+          supabaseClient = window.supabase.createClient(url, key);
+
+          showStatus(
+            "設定を読み込みました。\n" +
+            "Supabaseクライアントを初期化しました。\n\n" +
+            "次に新規登録またはログインを実行して、サーバーとの通信を確認してください。"
+          );
+
+          try {
+            const { data, error } =
+              await supabaseClient.auth.getSession();
+
+            if (error) throw error;
+
+            updateUserInfo(data.session?.user || null);
+          } catch (error) {
+            console.error(error);
+            showStatus(
+              "設定は読み込めましたが、セッションを確認できませんでした。\n" +
+              error.message
+            );
+          }
+        });
       });
 
-      if (error) {
-        showStatus("登録エラー：" + error.message);
-      } else if (data.session) {
-        showStatus("登録・ログインできました！");
-      } else {
-        showStatus("登録を受け付けました。確認メールが届いた場合は、メール内のリンクを開いてください。");
-      }
-    };
+      // 2. 新規プレイヤー登録
+      $("signupBtn").addEventListener("click", () => {
+        runTask(async () => {
+          const client = getClient();
+          const { email, password } = getCredentials();
+          const displayName = $("displayName").value.trim();
 
-    document.getElementById("loginBtn").onclick = async () => {
-      if (!supabaseClient) {
-        showStatus("先に接続を確認してください。");
-        return;
-      }
+          if (!displayName) {
+            throw new Error("プレイヤー名を入力してください。");
+          }
 
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value;
+          const { data, error } = await client.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                display_name: displayName
+              }
+            }
+          });
 
-      const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email,
-        password
+          if (error) throw error;
+
+          if (data.session && data.user) {
+            updateUserInfo(data.user);
+
+            showStatus(
+              "プレイヤー登録に成功しました。\n" +
+              "ログイン状態になりました。"
+            );
+          } else {
+            showStatus(
+              "登録リクエストを受け付けました。\n" +
+              "メール確認が必要な設定の場合は、届いたメールの案内に従ってください。\n" +
+              "確認後、ログインしてください。"
+            );
+          }
+        });
       });
 
-      if (error) {
-        showStatus("ログインエラー：" + error.message);
-      } else {
-        showStatus("ログイン成功：" + data.user.email);
-      }
-    };
+      // 3. ログイン
+      $("loginBtn").addEventListener("click", () => {
+        runTask(async () => {
+          const client = getClient();
+          const { email, password } = getCredentials();
 
-    document.getElementById("logoutBtn").onclick = async () => {
-      if (!supabaseClient) {
-        showStatus("先に接続を確認してください。");
-        return;
-      }
+          const { data, error } =
+            await client.auth.signInWithPassword({
+              email,
+              password
+            });
 
-      const { error } = await supabaseClient.auth.signOut();
-      showStatus(error ? "ログアウトエラー：" + error.message : "ログアウトしました。");
-    };
+          if (error) throw error;
+
+          updateUserInfo(data.user);
+
+          showStatus(
+            "ログインに成功しました。\n" +
+            "ユーザーID：" + data.user.id
+          );
+        });
+      });
+
+      // 4. ログイン状態の確認
+      $("checkBtn").addEventListener("click", () => {
+        runTask(async () => {
+          const client = getClient();
+
+          const { data, error } =
+            await client.auth.getUser();
+
+          if (error) throw error;
+
+          updateUserInfo(data.user);
+
+          showStatus(
+            data.user
+              ? "ログイン状態を確認しました。"
+              : "ログインしていません。"
+          );
+        });
+      });
+
+      // 5. ログアウト
+      $("logoutBtn").addEventListener("click", () => {
+        runTask(async () => {
+          const client = getClient();
+
+          const { error } = await client.auth.signOut();
+
+          if (error) throw error;
+
+          updateUserInfo(null);
+          showStatus("ログアウトしました。");
+        });
+      });
+
+      // ページ読み込み確認
+      showStatus(
+        "ページの読み込みが完了しました。\n" +
+        "Supabaseの設定を入力してください。"
+      );
+    })();
   </script>
 </body>
 </html>
